@@ -11,17 +11,18 @@
 #include <sys/wait.h>
 #include <sys/prctl.h>
 
-#include "transposition_table.h"
 #include "utils.h"
+#include "transposition_table.h"
 
-#define MIN_REQUIRED_TT_NODES 16
+#define MIN_REQUIRED_TT_NODES 0
 #define TT_DEPTH_THRESHOLD 0
 #define CHECK_FORCED
 #define CHECK_WIN
 #define DEEPCOPY
+#define USE_NN
 
 #define DEEPENING
-#define DEPTH 28
+#define DEPTH 11
 
 #define DEPLOY
 // #define TEST
@@ -38,6 +39,10 @@
 
 #if defined(DEPLOY) && defined(TEST)
     #error "Can't deploy and test at the same time"
+#endif
+
+#if defined(USE_NN)
+#include "ai/ai_core.h"
 #endif
 
 clock_t begin;
@@ -142,19 +147,19 @@ extern Eval _negamax(register Board* node, register Eval α, register Eval β){
     #elif defined(CHECK_FORCED)
         ttentry->best_move = get_forced_move(node);
     #endif
-    if (ttentry->best_move == COLUMNS){
-        if (board_is_move_possible(node, 3)){
-            ttentry->best_move = 3;
-        }else if (board_is_move_possible(node, 2)){
-            ttentry->best_move = 2;
-        }else if (board_is_move_possible(node, 4)){
-            ttentry->best_move = 4;
-        }else if (board_is_move_possible(node, 1)){
-            ttentry->best_move = 1;
-        }else if (board_is_move_possible(node, 5)){
-            ttentry->best_move = 5;
-        }
-    }
+    // if (ttentry->best_move == COLUMNS){
+    //     if (board_is_move_possible(node, 3)){
+    //         ttentry->best_move = 3;
+    //     }else if (board_is_move_possible(node, 2)){
+    //         ttentry->best_move = 2;
+    //     }else if (board_is_move_possible(node, 4)){
+    //         ttentry->best_move = 4;
+    //     }else if (board_is_move_possible(node, 1)){
+    //         ttentry->best_move = 1;
+    //     }else if (board_is_move_possible(node, 5)){
+    //         ttentry->best_move = 5;
+    //     }
+    // }
 
     // Actual minimax with alphabeta pruning
     Eval value = NINF;
@@ -188,7 +193,15 @@ extern Eval _negamax(register Board* node, register Eval α, register Eval β){
                     child_value = 50 + (Eval)_depth;
                 }
             }else{
+                #if defined(USE_NN)
+                Vector encoded = (Vector)(Scalar[128]){};
+                nn_encode(encoded, node->player1_bb, node->player2_bb,
+                          board_get_player(node));
+                child_value = (Eval)(nn_network(encoded)*30.0*
+                                     ((board_get_player(node) != 0)*2-1.0));
+                #else
                 child_value = 0;
+                #endif
             }
         }else{
             child_value = -_negamax(child, -β, -α);
@@ -226,14 +239,14 @@ extern Eval _negamax(register Board* node, register Eval α, register Eval β){
         if (should_add_to_tt){
             if (tmp_nodes_number > MIN_REQUIRED_TT_NODES){
                 #if defined(USE_REPLACE)
-                    ttentry->nodes = tmp_nodes_number;
+                ttentry->nodes = tmp_nodes_number;
                 #endif
                 transpositiontable_add(tt, node_hash, real_ttentry);
                 // ttentry is useless after this point
             }
         }else{
             #if defined(USE_REPLACE)
-                ttentry->nodes = tmp_nodes_number;
+            ttentry->nodes = tmp_nodes_number;
             #endif
         }
     }
@@ -270,7 +283,7 @@ Column negamax(register Board* node, register const Depth new_depth){
         #if !defined(DEBUG)
         printf("\r\x1b[0K");
         #endif
-        printf("[OUTPUT]: eval=%i  move=%i  depth=%i  %.2fmn/s  len_tt=%"PRIu64, eval, move, new_depth, kns/1000, len_transpositiontable(tt));
+        printf("[OUTPUT]: eval=%i  move=%i  depth=%i  %.2fkn/s  len_tt=%"PRIu64, eval, move, new_depth, kns, len_transpositiontable(tt));
         #if defined(DEBUG)
         printf("\n");
         #endif
@@ -542,8 +555,8 @@ int main(){
     // board.player1_bb = 30889408987144;
     // board.player2_bb = 72092779217420311;
 
-    board.player1_bb = 186171037242624;
-    board.player2_bb = 72150681638996609;
+    // board.player1_bb = 186171037242624;
+    // board.player2_bb = 72150681638996609;
 
     // board_move(&board, 6);
     // board_move(&board, 3);
@@ -554,9 +567,11 @@ int main(){
     // board_move(&board, 1);
     // board_move(&board, 6);
     // board_move(&board, 0);
+
     board_print(&board);
     printf("%li %li\n", board.player1_bb, board.player2_bb);
 
+    // /*
     #if defined(DEEPENING)
         Column move = deepening_negamax(&board, DEPTH);
         #if !defined(DEBUG)
@@ -573,6 +588,20 @@ int main(){
 
     printf(">>> ");
     getchar();
+    // */
+    /*
+    for (int i=0; i<7; i++){
+        board_move(&board, i);
+        board_print(&board);
+        Vector encoded = (Vector)(Scalar[128]){};
+        nn_encode(encoded, board.player1_bb, board.player2_bb,
+                  board_get_player(&board));
+        // print_vector(encoded, 128);
+        Eval child_value = (Eval)(-nn_network(encoded)*(Scalar)(50));
+        printf("%i\n", child_value);
+        board_unmove(&board, 0, i);
+    }
+    // */
 
     cleanup();
     return 0;
