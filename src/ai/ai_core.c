@@ -22,7 +22,7 @@ void conv3d_CONV3D_1(register const Tensor in, register Tensor out){
 				for (register VSize d=0; d<3; d++){
 					register Scalar cell = CONV3D_1_BIAS[k];
 					for (register VSize l=0; l<3; l++){
-						cell += dot(&in[mat_index3(3,7,6,d,i,j)], &CONV3D_1_KERNELS[mat_index3(8,3,3,k,l,0)], 3);
+						cell += dot(&in[mat_index3(3,7,6,d,i+l,j)], &CONV3D_1_KERNELS[mat_index3(8,3,3,k,l,0)], 3);
 					}
 					out[mat_index4(3,5,4,8,d,i,j,k)] = cell;
 				}
