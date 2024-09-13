@@ -12,15 +12,15 @@ static const char* YELLOW_STRING = "\x1b[93m⬤\x1b[0m";
 static const char* EMPTY_STRING = "-";
 static const char* ERROR_STRING = "ERROR";
 
-BitBoard COLUMN_MASKS[] = {
-                                         127,
-                                       16256,
-                                     2080768,
-                                   266338304,
-                                 34091302912,
-                               4363686772736,
-                             558551906910208
-                           };
+const BitBoard COLUMN_MASKS[] = {
+                                              127,
+                                            16256,
+                                          2080768,
+                                        266338304,
+                                      34091302912,
+                                    4363686772736,
+                                  558551906910208
+                                };
 Row NEXT_EMPTY_ROW[] = {0,1,ROWS,2,ROWS,ROWS,ROWS,3,ROWS,ROWS,ROWS,ROWS,ROWS,
                         ROWS,ROWS,4,ROWS,ROWS,ROWS,ROWS,ROWS,ROWS,ROWS,ROWS,
                         ROWS,ROWS,ROWS,ROWS,ROWS,ROWS,ROWS,5,ROWS,ROWS,ROWS,
@@ -30,19 +30,19 @@ Row NEXT_EMPTY_ROW[] = {0,1,ROWS,2,ROWS,ROWS,ROWS,3,ROWS,ROWS,ROWS,ROWS,ROWS,
 const BitBoard BOARD_HASH_MAGIC = 4432676798593ULL;
 
 
-bool _bb_get(register const BitBoard state, register const Row row, register const Column column){
+static inline __attribute__((always_inline)) bool _bb_get(register const BitBoard state, register const Row row, register const Column column){
     return (state & _bb_get_row_column_mask(row, column)) != 0;
 }
 
-BitBoard _bb_toggle(register const BitBoard state, register const Row row, register const Column column){
+static inline __attribute__((always_inline)) BitBoard _bb_toggle(register const BitBoard state, register const Row row, register const Column column){
     return state ^ _bb_get_row_column_mask(row, column);
 }
 
-ColumnState _bb_get_column(register const BitBoard state, register const Column column){
+static inline __attribute__((always_inline)) ColumnState _bb_get_column(register const BitBoard state, register const Column column){
     return ((state & COLUMN_MASKS[column]) >> ((ROWS+1)*column)) & 0b111111;
 }
 
-Row _bb_get_next_empty_row(register const BitBoard state, register const Column column){
+static inline __attribute__((always_inline)) Row _bb_get_next_empty_row(register const BitBoard state, register const Column column){
     return NEXT_EMPTY_ROW[_bb_get_column(state, column)];
 }
 
@@ -54,7 +54,7 @@ BitBoard _bb_mirror(register const BitBoard b){
     return output;
 }
 
-bool _bb_detect_win(register const BitBoard b){
+static inline __attribute__((always_inline)) bool _bb_detect_win(register const BitBoard b){
     // Copied from:
     //     https://github.com/denkspuren/BitboardC4/blob/master/BitboardDesign.md
     BitBoard bb;
@@ -200,7 +200,6 @@ Row board_move(register Board* board, register const Column column){
     board_switch_players(board);
     return row;
 }
-
 
 void board_unmove(register Board* board, register const Row row, register const Column column){
     // WARNING: This doesn't check if the move has actually been made
@@ -437,10 +436,22 @@ int main(){
     test_equal_hash();
     #endif
     clock_t begin = clock();
-    test_board_hash(1000000000);
+    test_board_hash(1000000);
     clock_t end = clock();
     printf("Took %f sec\n", (double)(end - begin) / CLOCKS_PER_SEC);
     printf("All tests passed\n");
+
+    // Board b1, b2;
+    // init_board(&b1);
+    // board_move(&b1, 4);
+    // board_reflect(&b1, &b2);
+    // board_print(&b1);
+    // board_print(&b2);
+    // board_move(&b1, 3);
+    // puts("");
+    // board_reflect(&b1, &b2);
+    // board_print(&b1);
+    // board_print(&b2);
 
     return 0;
 }

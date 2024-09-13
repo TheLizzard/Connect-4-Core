@@ -11,7 +11,7 @@
 #include <sys/wait.h>
 #include <sys/prctl.h>
 
-#include "utils.h"
+#include "board/utils.h"
 #include "transposition_table.h"
 
 #define MIN_REQUIRED_TT_NODES 0
@@ -19,21 +19,21 @@
 #define CHECK_FORCED
 #define CHECK_WIN
 #define DEEPCOPY
+
 #define USE_NN
+#define USE_STDOUT
 
 #define DEEPENING
-#define DEPTH 11
-
+#define DEPTH 20
 #define DEPLOY
 // #define TEST
 
-#define TEST_ALL_DEPTHS
+// #define TEST_ALL_DEPTHS
 // #define DEBUG
 
 #define TRACEBACK
 // #define ADV_TRACEBACK
-
-// #define INT_TRACEBACK
+#define INT_TRACEBACK
 #define SEGV_TRACEBACK
 
 
@@ -42,12 +42,14 @@
 #endif
 
 #if defined(USE_NN)
-#include "ai/ai_core.h"
+#include "board/ai/ai.h"
+#include "board/encoder.h"
 #endif
 
 clock_t begin;
 Nodes nodes_visited = 0;
 restrict TranspositionTable tt;
+Depth _maxdepth;
 Depth _depth;
 
 
@@ -85,15 +87,19 @@ Column get_forced_move(register Board* board){
 void ttentry_print(register const BoardHash hash){
     TTEntry* ttentry = transpositiontable_get(tt, hash);
     if (ttentry == NULL){
+        #if defined(USE_STDOUT)
         #if !defined(DEBUG)
         printf("\r\x1b[0K");
         #endif
         puts("[DEBUG]: (null)");
+        #endif
     }else{
+        #if defined(USE_STDOUT)
         #if !defined(DEBUG)
         printf("\r\x1b[0K");
         #endif
         printf("[DEBUG]: depth=%i  flag=%i  best_move=%i  eval=%i\n", pttentry_get_depth(ttentry), pttentry_get_flag(ttentry), ttentry->best_move, ttentry->eval);
+        #endif
     }
 }
 
@@ -194,11 +200,11 @@ extern Eval _negamax(register Board* node, register Eval α, register Eval β){
                 }
             }else{
                 #if defined(USE_NN)
-                Vector encoded = (Vector)(Scalar[128]){};
-                nn_encode(encoded, node->player1_bb, node->player2_bb,
-                          board_get_player(node));
-                child_value = (Eval)(nn_network(encoded)*30.0*
-                                     ((board_get_player(node) != 0)*2-1.0));
+                Scalar encoded[128];
+                encode_board(node, encoded);
+                child_value = (Eval)(nn_network(encoded)*30.0);
+                // child_value = (Eval)(nn_network(encoded)*30.0*
+                //                      ((board_get_player(node) != 0)*2-1.0));
                 #else
                 child_value = 0;
                 #endif
@@ -269,15 +275,18 @@ Column negamax(register Board* node, register const Depth new_depth){
     TTEntry* ttentry = transpositiontable_get(tt, board_hash(node));
 
     if (ttentry == NULL){
+        #if defined(USE_STDOUT)
         #if !defined(DEBUG)
         printf("\r\x1b[0K");
         #endif
         printf("[OUTPUT]: eval=%i  depth=%i  len_tt=%"PRIu64"\n", eval, new_depth, len_transpositiontable(tt));
         printf("[ERROR]: TT doesn't contain root node depth=%i\n", new_depth);
         fflush(stdout);
+        #endif
         return COLUMNS;
     }else{
         Column move = ttentry->best_move;
+        #if defined(USE_STDOUT)
         double time_delta = (double)((double)(clock()-begin) / (double)CLOCKS_PER_SEC);
         double kns = (double)(nodes_visited)/time_delta/1000;
         #if !defined(DEBUG)
@@ -288,6 +297,7 @@ Column negamax(register Board* node, register const Depth new_depth){
         printf("\n");
         #endif
         fflush(stdout);
+        #endif
         return move;
     }
 }
@@ -304,8 +314,11 @@ Column deepening_negamax(register Board* node, register Depth maxdepth){
     maxdepth = (max_possible_depth < maxdepth) ? max_possible_depth : maxdepth;
     // assert_true(4 <= maxdepth, "Invalid maxdepth - must be >= 8");
     Column move = COLUMNS;
-    for (Depth depth=2; depth<maxdepth+1; depth++){
+    for (Depth depth=1; depth<maxdepth+1; depth++){
         move = negamax(node, depth);
+        if (depth == _maxdepth){
+            break;
+        }
     }
     return move;
 }
@@ -360,14 +373,15 @@ void cleanup(){
     tt = NULL;
     sigprocmask(SIG_UNBLOCK, &block_set, NULL);
 }
+#if defined(INT_TRACEBACK)
 void keyboardinterrupt_handler(int signal){
     printf("\r\n\x1b[0K\x1b[96m[SIGNAL]: KeyboardInterrupt(%i)\x1b[0m\n", signal);
-    #if defined(INT_TRACEBACK)
     PRINT_TRACE_FUNC();
-    #endif
     cleanup();
     exit(0);
 }
+#endif
+#if defined(SEGV_TRACEBACK)
 void segv_handler(int signal){
     fprintf(stderr, "\r\x1b[0K\x1b[91mError: signal %d:\x1b[0m\n", signal);
     #if defined(SEGV_TRACEBACK)
@@ -376,14 +390,24 @@ void segv_handler(int signal){
     cleanup();
     exit(1);
 }
+#endif
 void init(){
+    #if defined(USE_NN)
+    init_ai();
+    #endif
+    #if defined(INT_TRACEBACK)
     signal(SIGINT, keyboardinterrupt_handler);
+    #endif
+    #if defined(SEGV_TRACEBACK)
     signal(SIGSEGV, segv_handler);
+    #endif
 
     begin = clock();
     tt = new_transpositiontable();
+    #if defined(USE_STDOUT)
     printf("\r\x1b[0K[TIME]: Creating TT of size %i ", TTSIZE);
     printf("took %.2fsec\n", (double)(clock()-begin)/CLOCKS_PER_SEC);
+    #endif
     begin = clock();
 }
 
@@ -473,31 +497,40 @@ int main(int argc, char* argv[]){
     Board board;
     init_board(&board);
 
+    #if defined(USE_STDOUT)
     printf("\r\x1b[0K[DEBUG]: sizeof{void*=%zu, ", sizeof(void*));
     printf("TTEntry=%zu, ", sizeof(TTEntry));
     printf("TTBucketEntry=%zu  ", sizeof(TTBucketEntry));
     printf("TTEntry=%zu}\n", sizeof(TTEntry));
+    #endif
 
-    if (argc != 3){
-        puts("[ERROR]: Usage: bot <player1_bb> <player2_bb>");
-        if (sizeof(void*) == 8){
-            printf(">>> ");
-            getchar();
-        }
+    if ((argc != 3) && (argc != 4)){
+        puts("[ERROR]: Usage: bot <player1_bb> <player2_bb> <?maxdepth>");
         return 1;
     }
     board_load(&board, atoi_u64(argv[1]), atoi_u64(argv[2]));
-    // board.player1_bb = 186171037242624;
-    // board.player2_bb = 72150681638996609;
+    if (argc == 4){
+        _maxdepth = (Depth)atoi(argv[3]);
+    }else{
+        _maxdepth = 50;
+    }
 
     // Print board and start iterative deepening
+    #if defined(USE_STDOUT)
     board_print(&board);
     printf("[DEBUG]: maxdepth=%i\n", board_num_empty_squares(&board));
+    #endif
     Column move = deepening_negamax(&board, board_num_empty_squares(&board));
+    #if defined(USE_STDOUT)
     printf("\n[FINAL]: move=%i  len_tt=%"PRIu64, move, len_transpositiontable(tt));
     printf("\n\x1b[92m[END]: Done\x1b[0m\n");
+    #endif
     cleanup();
+    #if defined(USE_STDOUT)
     return 0;
+    #else
+    return move;
+    #endif
 }
 
 

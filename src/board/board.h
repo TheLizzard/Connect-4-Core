@@ -17,6 +17,8 @@ typedef BitBoard BoardHash;
 typedef uint8_t ColumnState;
 typedef uint8_t Flags;
 
+extern const BitBoard COLUMN_MASKS[COLUMNS];
+
 
 #define GAME_OVER ((Flags)1)
 #define GAME_DRAW (((Flags)2)|GAME_OVER)
@@ -37,13 +39,7 @@ typedef struct{
 #define DRAW_MASK 141845657554976
 #define PLAYER_1_BIT_MASK _bb_get_row_column_mask(0, COLUMNS+1)
 
-// bool _bb_get(register const BitBoard state, register const Row row, register const Column column);
-// BitBoard _bb_toggle(register const BitBoard state, register const Row row, register const Column column);
-// ColumnState _bb_get_column(register const BitBoard state, register const Column column);
-// Row _bb_get_next_empty_row(register const BitBoard state, register const Column column);
-// BitBoard _bb_mirror(register const BitBoard b);
-// bool _bb_detect_win(register const BitBoard b);
-
+BitBoard _bb_mirror(register const BitBoard b);
 
 // init/reset/del board
 void init_board(register Board* board);
@@ -61,9 +57,36 @@ void board_switch_players(register Board* board);
 uint8_t board_num_empty_squares(register const Board* board);
 
 
-#define board_print(board) {char*string=board_string(board); puts(string); free(string);}
+#define board_print(board) { \
+    char* _board_print_string = board_string(board); \
+    puts(_board_print_string); \
+    free(_board_print_string); \
+}
+#define board_switch_players(board) { \
+    Board* _board_switch_players_board = (board);\
+    BitBoard _board_switch_players_temp = _board_switch_players_board->player1_bb; \
+    board->player1_bb = _board_switch_players_board->player2_bb; \
+    board->player2_bb = _board_switch_players_temp; \
+}
+#define board_deepcopy(src, des) { \
+    register const Board* _board_deepcopy_src = (src); \
+    register Board* _board_deepcopy_des = (des); \
+    _board_deepcopy_des->player1_bb=_board_deepcopy_src->player1_bb; \
+    _board_deepcopy_des->player2_bb=_board_deepcopy_src->player2_bb; \
+    _board_deepcopy_des->flags=_board_deepcopy_src->flags; \
+}
+#define board_reflect(src, des) { \
+    register const Board* _board_reflect_src = (src); \
+    register Board* _board_reflect_des = (des); \
+    _board_reflect_des->player1_bb = _bb_mirror(_board_reflect_src->player1_bb); \
+    _board_reflect_des->player2_bb = _bb_mirror(_board_reflect_src->player2_bb); \
+    _board_reflect_des->flags = _board_reflect_src->flags; \
+    if (board_get_player(_board_reflect_src)){ \
+        _board_reflect_des->player1_bb |= PLAYER_1_BIT_MASK; \
+    }else{ \
+        _board_reflect_des->player2_bb |= PLAYER_1_BIT_MASK; \
+    } \
+}
 #define board_is_game_over(board) (((board)->flags & GAME_OVER) == GAME_OVER)
 #define board_is_game_draw(board) (((board)->flags & GAME_DRAW) == GAME_DRAW)
 #define board_get_player(board) (((board)->player1_bb & PLAYER_1_BIT_MASK) != 0)
-#define board_switch_players(board) {BitBoard temp=board->player1_bb; board->player1_bb=board->player2_bb; board->player2_bb=temp;}
-#define board_deepcopy(src, des) {des->player1_bb=src->player1_bb; des->player2_bb=src->player2_bb; des->flags=src->flags;}

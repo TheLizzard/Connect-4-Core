@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
-#include "utils.h"
-#include "board.h"
+#include "board/utils.h"
+#include "board/board.h"
 
 //59369,65521,118739,237487,312677,787331,1000003,1048573,1409237,1500007 (type=TTSize)
 #define TTSIZE 1048573
@@ -37,10 +37,13 @@ typedef struct{
 #define ttentry_get_depth(ttentry) ((ttentry).flag_depth >> 2)
 #define pttentry_get_depth(ttentry) ((ttentry)->flag_depth >> 2)
 
-#define pttentry_set_flag_depth(ttentry, flag, depth) {\
-    assert_true(depth < 64, "flag_depth overflowed"); \
-    assert_true(flag <= TT_FLAG_MASK, "flag too big"); \
-    ttentry->flag_depth = (uint8_t)(((uint8_t)flag) | (((uint8_t)depth) << 2));}
+#define pttentry_set_flag_depth(ttentry, flag, depth){ \
+    register const Depth _pttentry_set_flag_depth_depth = (depth); \
+    register const uint8_t _pttentry_set_flag_depth_flag = (flag); \
+    assert_true(_pttentry_set_flag_depth_depth < 64, "flag_depth overflowed"); \
+    assert_true(_pttentry_set_flag_depth_flag <= TT_FLAG_MASK, "flag too big"); \
+    ttentry->flag_depth = (uint8_t)(_pttentry_set_flag_depth_flag | (depth<<2)); \
+}
 
 // TTBucketEntry
 typedef struct{
